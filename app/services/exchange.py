@@ -54,6 +54,7 @@ async def fetch_klines(symbol: str, interval: Interval, limit: int) -> list[dict
             "low": float(k[3]),
             "close": float(k[4]),
             "volume": float(k[5]),
+            "turnover": float(k[6]),  # USDT value
             "close_time": int(k[0]),
         }
         for k in rows
