@@ -39,14 +39,13 @@ def test_tickers_response_shape(client):
         assert field in ticker, f"Missing field: {field}"
 
 
-def test_tickers_change_pct_converted_from_decimal(client):
+def test_tickers_change_pct_value(client):
     with patch("app.services.exchange.httpx.AsyncClient", return_value=make_mock_client(MOCK_TICKERS_RESPONSE)):
         res = client.get("/api/tickers")
 
     tickers = {t["symbol"]: t for t in res.json()["tickers"]}
-    # Bybit sends 0.015 → should be stored as 1.5%
+    # Binance sends priceChangePercent already as plain % string
     assert tickers["BTCUSDT"]["change_24h_pct"] == 1.5
-    # Bybit sends -0.02 → should be -2.0%
     assert tickers["ETHUSDT"]["change_24h_pct"] == -2.0
 
 

@@ -2,50 +2,37 @@ import httpx
 import asyncio
 from typing import Literal
 
-BASE = "https://api.bybit.com"
+BASE = "https://fapi.binance.com"
 
 Interval = Literal["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
 
-_INTERVAL_MAP = {
-    "1m": "1", "5m": "5", "15m": "15",
-    "1h": "60", "4h": "240", "1d": "D", "1w": "W",
-}
-
 
 async def fetch_symbols() -> list[dict]:
-    """Return all active USDT linear perpetual symbols from Bybit."""
+    """Return all active USDT perpetual futures symbols from Binance."""
     async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            f"{BASE}/v5/market/instruments-info",
-            params={"category": "linear", "status": "Trading", "limit": 1000},
-        )
+        res = await client.get(f"{BASE}/fapi/v1/exchangeInfo")
         res.raise_for_status()
         data = res.json()
 
     return [
-        {"symbol": s["symbol"], "baseAsset": s["baseCoin"]}
-        for s in data["result"]["list"]
-        if s["quoteCoin"] == "USDT" and s["contractType"] == "LinearPerpetual"
+        {"symbol": s["symbol"], "baseAsset": s["baseAsset"]}
+        for s in data["symbols"]
+        if s["contractType"] == "PERPETUAL"
+        and s["quoteAsset"] == "USDT"
+        and s["status"] == "TRADING"
     ]
 
 
 async def fetch_klines(symbol: str, interval: Interval, limit: int) -> list[dict]:
-    """Return kline data for a single symbol from Bybit."""
+    """Return kline data for a single symbol from Binance."""
     async with httpx.AsyncClient(timeout=10) as client:
         res = await client.get(
-            f"{BASE}/v5/market/kline",
-            params={
-                "category": "linear",
-                "symbol": symbol,
-                "interval": _INTERVAL_MAP[interval],
-                "limit": limit,
-            },
+            f"{BASE}/fapi/v1/klines",
+            params={"symbol": symbol, "interval": interval, "limit": limit},
         )
         res.raise_for_status()
-        data = res.json()
+        raw = res.json()
 
-    # Bybit returns newest-first, reverse for chronological order
-    rows = list(reversed(data["result"]["list"]))
     return [
         {
             "open_time": int(k[0]),
@@ -54,20 +41,17 @@ async def fetch_klines(symbol: str, interval: Interval, limit: int) -> list[dict
             "low": float(k[3]),
             "close": float(k[4]),
             "volume": float(k[5]),
-            "turnover": float(k[6]),  # USDT value
-            "close_time": int(k[0]),
+            "turnover": float(k[7]),   # quoteAssetVolume = USDT value
+            "close_time": int(k[6]),
         }
-        for k in rows
+        for k in raw
     ]
 
 
 async def fetch_tickers() -> list[dict]:
-    """Return 24h ticker data for all active USDT linear perpetuals."""
+    """Return 24h ticker data for all active USDT perpetuals from Binance."""
     async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            f"{BASE}/v5/market/tickers",
-            params={"category": "linear"},
-        )
+        res = await client.get(f"{BASE}/fapi/v1/ticker/24hr")
         res.raise_for_status()
         data = res.json()
 
@@ -75,13 +59,13 @@ async def fetch_tickers() -> list[dict]:
         {
             "symbol": t["symbol"],
             "last_price": float(t["lastPrice"]),
-            "change_24h_pct": round(float(t["price24hPcnt"]) * 100, 2),
-            "high_24h": float(t["highPrice24h"]),
-            "low_24h": float(t["lowPrice24h"]),
-            "volume_24h": float(t["volume24h"]),
-            "turnover_24h": float(t["turnover24h"]),
+            "change_24h_pct": round(float(t["priceChangePercent"]), 2),
+            "high_24h": float(t["highPrice"]),
+            "low_24h": float(t["lowPrice"]),
+            "volume_24h": float(t["volume"]),
+            "turnover_24h": float(t["quoteVolume"]),
         }
-        for t in data["result"]["list"]
+        for t in data
         if t["symbol"].endswith("USDT")
     ]
 

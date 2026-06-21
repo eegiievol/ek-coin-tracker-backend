@@ -26,7 +26,7 @@ def test_klines_returns_chronological_order(client):
 
     assert res.status_code == 200
     data = res.json()["data"]
-    # Bybit mock returns newest-first; service should reverse to oldest-first
+    # Binance returns oldest-first already — verify chronological order preserved
     assert data[0]["open_time"] < data[1]["open_time"] < data[2]["open_time"]
 
 
