@@ -60,6 +60,31 @@ async def fetch_klines(symbol: str, interval: Interval, limit: int) -> list[dict
     ]
 
 
+async def fetch_tickers() -> list[dict]:
+    """Return 24h ticker data for all active USDT linear perpetuals."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        res = await client.get(
+            f"{BASE}/v5/market/tickers",
+            params={"category": "linear"},
+        )
+        res.raise_for_status()
+        data = res.json()
+
+    return [
+        {
+            "symbol": t["symbol"],
+            "last_price": float(t["lastPrice"]),
+            "change_24h_pct": round(float(t["price24hPcnt"]) * 100, 2),
+            "high_24h": float(t["highPrice24h"]),
+            "low_24h": float(t["lowPrice24h"]),
+            "volume_24h": float(t["volume24h"]),
+            "turnover_24h": float(t["turnover24h"]),
+        }
+        for t in data["result"]["list"]
+        if t["symbol"].endswith("USDT")
+    ]
+
+
 async def fetch_klines_multi(
     symbols: list[str], interval: Interval, limit: int
 ) -> dict[str, list[dict]]:
