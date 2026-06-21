@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Annotated
-from ..services.binance import fetch_klines, fetch_klines_multi, Interval
+from ..services.exchange import fetch_klines, fetch_klines_multi, Interval
 
 router = APIRouter(prefix="/api/volume", tags=["volume"])
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from ..services.binance import fetch_symbols
+from ..services.exchange import fetch_symbols
 
 router = APIRouter(prefix="/api/symbols", tags=["symbols"])
 

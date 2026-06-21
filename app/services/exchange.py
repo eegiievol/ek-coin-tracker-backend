@@ -1,51 +1,62 @@
 import httpx
-import os
+import asyncio
 from typing import Literal
 
-# Use testnet locally if BINANCE_TESTNET=true, production otherwise
-_TESTNET = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
-FAPI_BASE = "https://testnet.binancefuture.com" if _TESTNET else "https://fapi.binance.com"
+BASE = "https://api.bybit.com"
 
 Interval = Literal["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
 
+_INTERVAL_MAP = {
+    "1m": "1", "5m": "5", "15m": "15",
+    "1h": "60", "4h": "240", "1d": "D", "1w": "W",
+}
+
 
 async def fetch_symbols() -> list[dict]:
-    """Return all active USDT-M perpetual futures symbols."""
+    """Return all active USDT linear perpetual symbols from Bybit."""
     async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(f"{FAPI_BASE}/fapi/v1/exchangeInfo")
+        res = await client.get(
+            f"{BASE}/v5/market/instruments-info",
+            params={"category": "linear", "status": "Trading", "limit": 1000},
+        )
         res.raise_for_status()
         data = res.json()
 
     return [
-        {"symbol": s["symbol"], "baseAsset": s["baseAsset"]}
-        for s in data["symbols"]
-        if s["contractType"] == "PERPETUAL"
-        and s["quoteAsset"] == "USDT"
-        and s["status"] == "TRADING"
+        {"symbol": s["symbol"], "baseAsset": s["baseCoin"]}
+        for s in data["result"]["list"]
+        if s["quoteCoin"] == "USDT" and s["contractType"] == "LinearPerpetual"
     ]
 
 
 async def fetch_klines(symbol: str, interval: Interval, limit: int) -> list[dict]:
-    """Return kline data for a single symbol."""
+    """Return kline data for a single symbol from Bybit."""
     async with httpx.AsyncClient(timeout=10) as client:
         res = await client.get(
-            f"{FAPI_BASE}/fapi/v1/klines",
-            params={"symbol": symbol, "interval": interval, "limit": limit},
+            f"{BASE}/v5/market/kline",
+            params={
+                "category": "linear",
+                "symbol": symbol,
+                "interval": _INTERVAL_MAP[interval],
+                "limit": limit,
+            },
         )
         res.raise_for_status()
-        raw = res.json()
+        data = res.json()
 
+    # Bybit returns newest-first, reverse for chronological order
+    rows = list(reversed(data["result"]["list"]))
     return [
         {
-            "open_time": k[0],
+            "open_time": int(k[0]),
             "open": float(k[1]),
             "high": float(k[2]),
             "low": float(k[3]),
             "close": float(k[4]),
             "volume": float(k[5]),
-            "close_time": k[6],
+            "close_time": int(k[0]),
         }
-        for k in raw
+        for k in rows
     ]
 
 
@@ -53,7 +64,6 @@ async def fetch_klines_multi(
     symbols: list[str], interval: Interval, limit: int
 ) -> dict[str, list[dict]]:
     """Fetch klines for multiple symbols concurrently."""
-    import asyncio
 
     async def _fetch(sym: str):
         try:
